@@ -70,7 +70,9 @@ public class IpmServer implements Runnable {
 	
 	public BufferedReader cmd_input;
 	
-	public  IpmUI ui = null;
+	public IpmUI ui = null;
+	
+	public IpmSns sns = null;
 	
 	public IpmServer() {
 		this("127.0.0.1", 5654, "127.0.0.1", 5654);
@@ -96,6 +98,7 @@ public class IpmServer implements Runnable {
 			KeyPairGenerator rsa_key_generator = KeyPairGenerator.getInstance("RSA");
 			rsa_key_generator.initialize(2048, new SecureRandom());
 			key_pair = rsa_key_generator.generateKeyPair();
+			sns = new IpmSns(key_pair.getPrivate(), key_pair.getPublic(), this);
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.exit(1);
@@ -147,6 +150,9 @@ public class IpmServer implements Runnable {
 			uiAppend("Server key: " + serverKey.base64());
 			
 			host = priv_host = UPnP.getLocalIP();
+			if(host == null) {
+				host = priv_host = "127.0.0.1";
+			}
 			
 			if(tport != port) {
 				send(thost, tport, serverKey, host, port, new IpmKey(), IpmPacket.PING);
@@ -340,6 +346,15 @@ public class IpmServer implements Runnable {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	public void uiCheck(String userid) {
+		
+	}
+	
+	public void uiPost(String text) {
+		sns.writePost(text);
+		uiAppend(sns.readNotes(sns.get()).toString());
 	}
 	
 	public void ping(String thost, int tport) {
