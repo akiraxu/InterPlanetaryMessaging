@@ -16,7 +16,9 @@ public class IpmKey {
 	
 	public IpmKey(String str) throws Exception {
 		MessageDigest digest = MessageDigest.getInstance("SHA-256");
-		key = digest.digest(str.getBytes(StandardCharsets.UTF_8));
+		byte[] hash = digest.digest(str.getBytes(StandardCharsets.UTF_8));
+		key = new byte[IpmConfig.KEY_LENGTH];
+		System.arraycopy(hash, 0, key, 0, IpmConfig.KEY_LENGTH);
 	}
 	
 	public IpmKey(byte[] b) throws Exception {

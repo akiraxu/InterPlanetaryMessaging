@@ -50,6 +50,8 @@ public class IpmServer implements Runnable {
 	public DatagramSocket aSocket;
 	public DatagramChannel aChannel;
 	public IpmDhtData DHT;
+	public ImpDhtStore store;
+	public IpmSns sns;
 	public IpmKey serverKey;
 	public String host;
 	public int port;
@@ -72,8 +74,6 @@ public class IpmServer implements Runnable {
 	
 	public IpmUI ui = null;
 	
-	public IpmSns sns = null;
-	
 	public IpmServer() {
 		this("127.0.0.1", 5654, "127.0.0.1", 5654);
 		trackerMode = true;
@@ -89,6 +89,7 @@ public class IpmServer implements Runnable {
 		
 		serverKey = new IpmKey();
 		DHT = new IpmDhtData(serverKey);
+		store = new ImpDhtStore();
 
 		chats = new HashMap<IpmKey, IpmOtrIpfs>();
 		
@@ -98,7 +99,7 @@ public class IpmServer implements Runnable {
 			KeyPairGenerator rsa_key_generator = KeyPairGenerator.getInstance("RSA");
 			rsa_key_generator.initialize(2048, new SecureRandom());
 			key_pair = rsa_key_generator.generateKeyPair();
-			sns = new IpmSns(key_pair.getPrivate(), key_pair.getPublic(), this);
+			sns = new IpmSnsIpfs(key_pair.getPrivate(), key_pair.getPublic(), this);
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.exit(1);
@@ -153,6 +154,8 @@ public class IpmServer implements Runnable {
 			if(host == null) {
 				host = priv_host = "127.0.0.1";
 			}
+			
+			ping(host, port);
 			
 			if(tport != port) {
 				send(thost, tport, serverKey, host, port, new IpmKey(), IpmPacket.PING);
@@ -210,6 +213,7 @@ public class IpmServer implements Runnable {
 			}
 			break;
 		case IpmPacket.STORE:
+			store.put(receivedPacket.reply, receivedPacket);
 			break;
 		case IpmPacket.FIND_NODE:
 			if(rc) {
@@ -223,6 +227,10 @@ public class IpmServer implements Runnable {
 			}
 			break;
 		case IpmPacket.FIND_VALUE:
+			System.out.println(store.get(receivedPacket.reply));
+			for(IpmPacket pkt : store.get(receivedPacket.reply)) {
+				send(receivedPacket.ip, receivedPacket.port, pkt.id, pkt.ip, pkt.port, new IpmKey(), IpmPacket.RETURN_VALUE, pkt.getExtra());
+			}
 			break;
 		case IpmPacket.RETURN_NODE:
 			if(rc) {
@@ -231,6 +239,7 @@ public class IpmServer implements Runnable {
 			ping(receivedPacket.ip, receivedPacket.port);
 			break;
 		case IpmPacket.RETURN_VALUE:
+			uiAppend(sns.readNotes((new String(receivedPacket.getExtra()).trim())).toString());
 			break;
 		case IpmPacket.MESSAGE:
 			
@@ -349,12 +358,27 @@ public class IpmServer implements Runnable {
 	}
 	
 	public void uiCheck(String userid) {
-		
+		IpmKey user = null;
+		try {
+			user = new IpmKey(userid);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		for(IpmPacket target : DHT.searchById(user)) {
+			send(target.ip, target.port, serverKey, host, port, user, IpmPacket.FIND_VALUE);
+		}
 	}
 	
 	public void uiPost(String text) {
 		sns.writePost(text);
-		uiAppend(sns.readNotes(sns.get()).toString());
+		//uiAppend(sns.readNotes(sns.get()).toString());
+		try {
+			for(IpmPacket target : DHT.searchById(new IpmKey(serverKey.base64()))) {
+				send(target.ip, target.port, serverKey, host, port, new IpmKey(serverKey.base64()), IpmPacket.STORE, sns.get().getBytes());
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 	
 	public void ping(String thost, int tport) {
